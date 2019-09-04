@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"regexp"
@@ -23,9 +24,16 @@ type slackRequest struct {
 // createOpslogEvent converts the raw text to a datadog event and pushes it
 func createOpslogEvent(req slackRequest, ddClient *dd.Client) string {
 
+	dashURL := fmt.Sprintf("https://%s.datadoghq.com/dashboard/%s/opslog",
+		os.Getenv("DD_TEAM_NAME"), os.Getenv("DD_DASH_ID"))
+
 	opslogEvent := dd.Event{}
-	// TODO: change tag to opslog when done
-	opslogEvent.Tags = []string{"app:opslog-test"}
+	// TODO: change tag to opslog when done along with tf dd filter
+	opslogEvent.Tags = []string{
+		"app:opslog-test",
+		fmt.Sprintf("channel:%s", req.channelName),
+		fmt.Sprintf("user:%s", req.userName),
+	}
 
 	tags := harvestTags(req.text)
 
@@ -34,9 +42,13 @@ func createOpslogEvent(req slackRequest, ddClient *dd.Client) string {
 	opslogEvent.SetTitle(detaggedEvent)
 	opslogEvent.Tags = append(opslogEvent.Tags, tags...)
 
-	return fmt.Sprintf("rgr. see Opslog entries here: https://%s.datadoghq.com/dashboard/%s/opslog",
-		os.Getenv("DD_TEAM_NAME"),
-		os.Getenv("DD_DASH_ID"))
+	_, err := ddClient.PostEvent(&opslogEvent)
+	if err != nil {
+		log.Print("Error posting event to slack")
+		return "Error posting event to slack"
+	}
+
+	return fmt.Sprintf("done. %s", dashURL)
 }
 
 // harvestTags infers the dd tags from the original text
@@ -54,13 +66,15 @@ func harvestTags(input string) []string {
 // detagOrig removes the dd tags from the original text
 func detagOrig(input string, tags []string) string {
 	for _, tag := range tags {
-		input = strings.Replace(input, string(tag), "", -1)
+		tag = fmt.Sprintf("#%s", tag)
+		input = strings.Replace(input, tag, "", -1)
 	}
 	return strings.TrimSpace(input)
 }
 
-// AWS lambda safe response wrapper
+// AWS lambda safe response wrapper + logging return body
 func repsond(response string) (events.APIGatewayProxyResponse, error) {
+	log.Print(response)
 	return events.APIGatewayProxyResponse{
 		Body:       response,
 		StatusCode: 200,
@@ -77,6 +91,8 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		vals.Get("text"),
 	}
 
+	log.Printf("user %s in chan %s with text: %s", req.userName, req.channelName, req.text)
+
 	token := os.Getenv("VERIFICATION_TOKEN")
 	if req.token != token {
 		return repsond("Invalid token.")
@@ -86,9 +102,16 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		return repsond("Message is over 400 characters, Invalid.")
 	}
 
+	if req.channelName == "directmessage" {
+		return repsond("No direct messages, Invalid.")
+	}
+
 	ddClient := dd.NewClient(os.Getenv("DD_API_KEY"), os.Getenv("DD_APP_KEY"))
 
-	return repsond(createOpslogEvent(req, ddClient))
+	return events.APIGatewayProxyResponse{
+		Body:       createOpslogEvent(req, ddClient),
+		StatusCode: 200,
+	}, nil
 }
 
 func main() {
