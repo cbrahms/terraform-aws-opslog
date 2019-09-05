@@ -21,7 +21,7 @@ resource "datadog_dashboard" "opslog_dashboard" {
       title_size  = 16
       title_align = "left"
       time = {
-        live_span = "1d"
+        live_span = "1w"
       }
     }
     layout = {
@@ -77,11 +77,12 @@ resource "aws_lambda_function" "opslog_lambda" {
   runtime          = "go1.x"
   environment {
     variables = {
-      DD_API_KEY         = "${var.dd_api_key}",
-      DD_APP_KEY         = "${var.dd_app_key}",
-      VERIFICATION_TOKEN = "${var.slack_verification_token}",
-      DD_DASH_ID         = "${datadog_dashboard.opslog_dashboard.id}",
-      DD_TEAM_NAME       = "${var.datadog_team}"
+      DD_API_KEY               = "${var.dd_api_key}",
+      DD_APP_KEY               = "${var.dd_app_key}",
+      SLACK_VERIFICATION_TOKEN = "${var.slack_verification_token}",
+      DD_DASH_ID               = "${datadog_dashboard.opslog_dashboard.id}",
+      DD_TEAM_NAME             = "${var.datadog_team}"
+      SLACK_TOKEN              = "${var.slack_token}"
     }
   }
 }

@@ -14,6 +14,10 @@ variable "slack_verification_token" {
   description = "Slack verification token"
 }
 
+variable "slack_token" {
+  description = "Slack OAuth Access Token"
+}
+
 variable "aws_endpoint_region" {
   description = "AWS reqion the endpoint will be deployed"
 }

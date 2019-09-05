@@ -10,22 +10,21 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/nlopes/slack"
 	dd "gopkg.in/zorkian/go-datadog-api.v2"
 )
 
 // slackRequest are the important fields we care about from the full slack request
 type slackRequest struct {
 	token       string
+	channelID   string
 	channelName string
 	userName    string
 	text        string
 }
 
 // createOpslogEvent converts the raw text to a datadog event and pushes it
-func createOpslogEvent(req slackRequest, ddClient *dd.Client) string {
-
-	dashURL := fmt.Sprintf("https://%s.datadoghq.com/dashboard/%s/opslog",
-		os.Getenv("DD_TEAM_NAME"), os.Getenv("DD_DASH_ID"))
+func createOpslogEvent(req slackRequest) dd.Event {
 
 	opslogEvent := dd.Event{}
 	// TODO: change tag to opslog when done along with tf dd filter
@@ -42,13 +41,7 @@ func createOpslogEvent(req slackRequest, ddClient *dd.Client) string {
 	opslogEvent.SetTitle(detaggedEvent)
 	opslogEvent.Tags = append(opslogEvent.Tags, tags...)
 
-	_, err := ddClient.PostEvent(&opslogEvent)
-	if err != nil {
-		log.Print("Error posting event to slack")
-		return "Error posting event to slack"
-	}
-
-	return fmt.Sprintf("done. %s", dashURL)
+	return opslogEvent
 }
 
 // harvestTags infers the dd tags from the original text
@@ -81,11 +74,52 @@ func repsond(response string) (events.APIGatewayProxyResponse, error) {
 	}, nil
 }
 
+// splitTag formats it pretty for slack
+func splitTag(tag string) string {
+	re := regexp.MustCompile(`:`)
+	tags := re.Split(tag, 2)
+	return fmt.Sprintf("*%s:* %s", tags[0], tags[1])
+}
+
+// fmtChannelAck formats the ack message with new block messaging from slack
+func fmtChannelAck(event dd.Event) slack.MsgOption {
+
+	var tags []slack.MixedElement
+	for _, tag := range event.Tags {
+		if strings.Contains(tag, "channel:") || strings.Contains(tag, "app:opslog") {
+			continue
+		}
+		fmtdTag := splitTag(tag)
+		newTag := slack.NewTextBlockObject("mrkdwn", fmtdTag, false, false)
+		tags = append(tags, newTag)
+	}
+	headerText := slack.NewTextBlockObject("mrkdwn", event.GetTitle(), false, false)
+	headerSection := slack.NewSectionBlock(headerText, nil, nil)
+	divSection := slack.NewDividerBlock()
+	tagsSection := slack.NewContextBlock(
+		"",
+		tags...,
+	)
+	msg := slack.MsgOptionBlocks(
+		headerSection,
+		divSection,
+		tagsSection,
+	)
+
+	return msg
+}
+
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+
+	slackAPI := slack.New(os.Getenv("SLACK_TOKEN"))
+	ddClient := dd.NewClient(os.Getenv("DD_API_KEY"), os.Getenv("DD_APP_KEY"))
+	dashURL := fmt.Sprintf("https://%s.datadoghq.com/dashboard/%s/opslog",
+		os.Getenv("DD_TEAM_NAME"), os.Getenv("DD_DASH_ID"))
 
 	vals, _ := url.ParseQuery(request.Body)
 	req := slackRequest{
 		vals.Get("token"),
+		vals.Get("channel_id"),
 		vals.Get("channel_name"),
 		vals.Get("user_name"),
 		vals.Get("text"),
@@ -93,7 +127,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	log.Printf("user %s in chan %s with text: %s", req.userName, req.channelName, req.text)
 
-	token := os.Getenv("VERIFICATION_TOKEN")
+	token := os.Getenv("SLACK_VERIFICATION_TOKEN")
 	if req.token != token {
 		return repsond("Invalid token.")
 	}
@@ -106,10 +140,20 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		return repsond("No direct messages, Invalid.")
 	}
 
-	ddClient := dd.NewClient(os.Getenv("DD_API_KEY"), os.Getenv("DD_APP_KEY"))
+	opslogEvent := createOpslogEvent(req)
+
+	_, err := ddClient.PostEvent(&opslogEvent)
+	if err != nil {
+		return repsond("Error posting event to datadog")
+	}
+
+	_, _, err = slackAPI.PostMessage(req.channelID, fmtChannelAck(opslogEvent))
+	if err != nil {
+		log.Printf("Slack error: %s", err)
+	}
 
 	return events.APIGatewayProxyResponse{
-		Body:       createOpslogEvent(req, ddClient),
+		Body:       fmt.Sprintf("ok, %s", dashURL),
 		StatusCode: 200,
 	}, nil
 }
