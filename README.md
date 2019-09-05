@@ -18,6 +18,8 @@ opslog will also create a Datadog event, using the slash commands hashtags as ta
 
 ![ack image](img/dd_event.png)
 
+Using the user provided tag, `r:1234`, this event can be overlaid on time graphs and other opslog events can be tagged similarly to be grouped together identifying the same task or outage
+
 ## installing
 
 1. submodule or clone this into a terraform repo's modules folder, $wherever that may be.
