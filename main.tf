@@ -15,7 +15,7 @@ resource "datadog_dashboard" "opslog_dashboard" {
 
   widget {
     event_stream_definition {
-      query       = "tags:app:opslog-test"
+      query       = "tags:app:opslog"
       event_size  = "l"
       title       = "Opslog events reported from Slack."
       title_size  = 16

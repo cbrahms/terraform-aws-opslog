@@ -31,9 +31,8 @@ type slackRequest struct {
 func createOpslogEvent(req slackRequest) dd.Event {
 
 	opslogEvent := dd.Event{}
-	// TODO: change tag to opslog when done along with tf dd filter
 	opslogEvent.Tags = []string{
-		"app:opslog-test",
+		"app:opslog",
 		fmt.Sprintf("channel:%s", req.channelName),
 		fmt.Sprintf("user:%s", req.userName),
 	}

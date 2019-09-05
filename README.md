@@ -2,11 +2,21 @@
 
 A slack slash command that creates tagged datadog events.
 
-Having a record of the manual tasks an ops team is performing is vital. It provides greater operational visibility, enhances communication, and gives unique insight during a PMR. Using or building off of this this terraform module can provide a team with another resource to precisely record potentially impacting real time events.
+Having a record of the manual tasks a devops team is performing is vital. It provides greater operational visibility, enhances communication, and gives unique insight during a PMR. Using or building off of this this terraform module can provide a team with another resource to precisely record potentially impacting real time events.
 
 ## example usage
 
-TODO
+To log a new event and tag it use the slash command like follows:
+
+![invoke image](img/invoke.png)
+
+After privately replying to you with the datadog URL, opslog will ack your entry in the channel:
+
+![ack image](img/ack.png)
+
+opslog will also create a Datadog event, using the slash commands hashtags as tags:
+
+![ack image](img/dd_event.png)
 
 ## installing
 
@@ -21,6 +31,7 @@ TODO
         dd_app_key               = "${var.dd_app_key}"
         aws_account_id           = "${var.aws_account_id}"
         slack_verification_token = "${var.slack_verification_token}"
+        slack_oauth_token        = "${var.slack_oauth_token}"
         aws_endpoint_region      = "us-east-1"
         datadog_team             = "my-cool-team"
 
@@ -39,7 +50,4 @@ TODO
 
 3. run `terraform init` again to load the new module.
 4. apply the terraform
-5. create 2 slack slash commands using the output URL like follows:
-
-
-TODO
+5. add the URL output from the terrorm + `/opslog` as the slash command URL
