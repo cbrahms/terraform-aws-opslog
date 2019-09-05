@@ -38,6 +38,7 @@ Using the user provided tag, `r:1234`, this event can be overlaid on time graphs
         datadog_team             = "my-cool-team"
 
     }
+
     resource "aws_api_gateway_deployment" "opslog_deployment" {
         depends_on  = ["module.opslog.opslog_url"]
         rest_api_id = "${module.opslog.opslog_url}"
