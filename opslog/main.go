@@ -3,16 +3,20 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/nlopes/slack"
 	dd "gopkg.in/zorkian/go-datadog-api.v2"
 )
+
+var ackVariations = [...]string{"okay", "rgr", "sounds good", "alright", "ack"}
 
 // slackRequest are the important fields we care about from the full slack request
 type slackRequest struct {
@@ -75,7 +79,7 @@ func repsond(response string) (events.APIGatewayProxyResponse, error) {
 }
 
 // splitTag formats it pretty for slack
-func splitTag(tag string) string {
+func fmtTag(tag string) string {
 	re := regexp.MustCompile(`:`)
 	tags := re.Split(tag, 2)
 	return fmt.Sprintf("*%s:* %s", tags[0], tags[1])
@@ -84,25 +88,22 @@ func splitTag(tag string) string {
 // fmtChannelAck formats the ack message with new block messaging from slack
 func fmtChannelAck(event dd.Event) slack.MsgOption {
 
-	var tags []slack.MixedElement
+	var tagBlocks []slack.MixedElement
 	for _, tag := range event.Tags {
 		if strings.Contains(tag, "channel:") || strings.Contains(tag, "app:opslog") {
 			continue
 		}
-		fmtdTag := splitTag(tag)
-		newTag := slack.NewTextBlockObject("mrkdwn", fmtdTag, false, false)
-		tags = append(tags, newTag)
+		tagBlock := slack.NewTextBlockObject("mrkdwn", fmtTag(tag), false, false)
+		tagBlocks = append(tagBlocks, tagBlock)
 	}
 	headerText := slack.NewTextBlockObject("mrkdwn", event.GetTitle(), false, false)
 	headerSection := slack.NewSectionBlock(headerText, nil, nil)
-	divSection := slack.NewDividerBlock()
 	tagsSection := slack.NewContextBlock(
 		"",
-		tags...,
+		tagBlocks...,
 	)
 	msg := slack.MsgOptionBlocks(
 		headerSection,
-		divSection,
 		tagsSection,
 	)
 
@@ -111,7 +112,7 @@ func fmtChannelAck(event dd.Event) slack.MsgOption {
 
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 
-	slackAPI := slack.New(os.Getenv("SLACK_TOKEN"))
+	slackAPI := slack.New(os.Getenv("SLACK_OAUTH_TOKEN"))
 	ddClient := dd.NewClient(os.Getenv("DD_API_KEY"), os.Getenv("DD_APP_KEY"))
 	dashURL := fmt.Sprintf("https://%s.datadoghq.com/dashboard/%s/opslog",
 		os.Getenv("DD_TEAM_NAME"), os.Getenv("DD_DASH_ID"))
@@ -152,8 +153,11 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		log.Printf("Slack error: %s", err)
 	}
 
+	rand.Seed(time.Now().UnixNano())
+	chosenAck := ackVariations[rand.Intn(len(ackVariations)-1)]
+
 	return events.APIGatewayProxyResponse{
-		Body:       fmt.Sprintf("ok, %s", dashURL),
+		Body:       fmt.Sprintf("%s, %s", chosenAck, dashURL),
 		StatusCode: 200,
 	}, nil
 }

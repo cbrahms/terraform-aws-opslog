@@ -14,7 +14,7 @@ variable "slack_verification_token" {
   description = "Slack verification token"
 }
 
-variable "slack_token" {
+variable "slack_oauth_token" {
   description = "Slack OAuth Access Token"
 }
 

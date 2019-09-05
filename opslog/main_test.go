@@ -19,3 +19,16 @@ func TestHarvestTags(t *testing.T) {
 		assert.Equal(t, c.tags, harvestTags(c.in))
 	}
 }
+
+func TestDetagOrig(t *testing.T) {
+	cases := []struct {
+		in   string
+		tags []string
+		out  string
+	}{
+		{in: "red alert #server:1234", tags: []string{"server:1234"}, out: "red alert"},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.out, detagOrig(c.in, c.tags))
+	}
+}
