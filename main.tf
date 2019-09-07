@@ -83,6 +83,7 @@ resource "aws_lambda_function" "opslog_lambda" {
       DD_APP_KEY               = "${var.dd_app_key}",
       DD_TEAM_NAME             = "${var.datadog_team}",
       DD_DASH_ID               = "${datadog_dashboard.opslog_dashboard.id}"
+      DB_TABLE_NAME            = "${aws_dynamodb_table.opslog_table.id}"
     }
   }
 }
@@ -97,7 +98,7 @@ resource "aws_lambda_permission" "api_gw_lambda_perms" {
 }
 
 resource "aws_iam_role" "oplog_lambda_IAM_role" {
-  name = "OpslogLambdaIAM"
+  name = "oplog_lambda_IAM_role"
 
   assume_role_policy = <<EOF
 {
@@ -151,3 +152,51 @@ EOF
 // AWS DynamoDB
 //
 
+resource "aws_dynamodb_table" "opslog_table" {
+  name     = "opslog"
+  hash_key = "Channel"
+  range_key = "MessageIdentifier"
+
+  write_capacity = 1
+  read_capacity  = 1
+
+  attribute {
+    name = "Channel"
+    type = "S"
+  }
+
+  attribute {
+    name = "MessageIdentifier"
+    type = "S"
+  }
+
+  tags = {
+    App = "opslog"
+  }
+}
+
+resource "aws_iam_role_policy" "opslog_dynamodb_policy" {
+  name = "opslog_dynamodb_policy"
+  role = "${aws_iam_role.oplog_lambda_IAM_role.id}"
+
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+        {
+      "Action": [
+        "dynamodb:DeleteItem",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:Query",
+        "dynamodb:UpdateItem",
+        "dynamodb:BatchGetItem"
+
+      ],
+      "Resource": "${aws_dynamodb_table.opslog_table.arn}",
+      "Effect": "Allow"
+    }
+  ]
+}
+EOF
+}
