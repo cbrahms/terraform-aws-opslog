@@ -14,10 +14,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/nlopes/slack"
-	dd "gopkg.in/zorkian/go-datadog-api.v2"
 )
 
-// slackRequest are the important fields we care about from the full slack request
+// slackRequest are the important fields we care about from the full slash cmd
 type slackRequest struct {
 	token       string
 	channelID   string
@@ -29,10 +28,8 @@ type slackRequest struct {
 
 var ddbClient *dynamodb.DynamoDB
 var slackClient *slack.Client
-var ddClient *dd.Client
-var dashURL string
 
-// init all the clients, prime dash URL
+// init clients
 func init() {
 	region := os.Getenv("AWS_REGION")
 	if session, err := session.NewSession(&aws.Config{
@@ -43,9 +40,6 @@ func init() {
 		ddbClient = dynamodb.New(session)
 	}
 	slackClient = slack.New(os.Getenv("SLACK_OAUTH_TOKEN"))
-	ddClient = dd.NewClient(os.Getenv("DD_API_KEY"), os.Getenv("DD_APP_KEY"))
-	dashURL = fmt.Sprintf("https://%s.datadoghq.com/dashboard/%s/opslog",
-		os.Getenv("DD_TEAM_NAME"), os.Getenv("DD_DASH_ID"))
 }
 
 // AWS lambda safe response wrapper + logging return body & ephimeral reason reply
@@ -97,18 +91,29 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	// help
 	case req.text == "help":
 
-		msg := fmtSendHelp(req, dashURL)
+		msg := fmtSendHelp()
 		_, err := slackClient.PostEphemeral(req.channelID, req.userID, msg)
 		if err != nil {
-			log.Printf("Slack error: %s", err.Error())
+			return respond(fmt.Sprintf("Slack error: %s", err.Error()))
 		}
 		return ok()
 
 	// deletelast
 	case req.text == "deletelast":
 
-		lastEntry := getLastOpslog(req.userName)
-		return respond(lastEntry)
+		lastOpslog, err := getLatestByUser(req.userName)
+		if err != nil {
+			return respond(fmt.Sprintf("Get latest error: %s", err.Error()))
+		}
+		err = deleteOpslog(lastOpslog)
+		if err != nil {
+			return respond(fmt.Sprintf("delete item error: %s", err.Error()))
+		}
+		_, _, err = slackClient.DeleteMessage(lastOpslog.ChannelID, lastOpslog.AckTimestamp)
+		if err != nil {
+			return respond(fmt.Sprintf("Slack error: %s", err.Error()))
+		}
+		return ok()
 
 	// show x
 	case reShow.Match([]byte(req.text)):
@@ -138,6 +143,14 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 		opslogEvent := createOpslogEvent(req)
 
+		_, ackTimestamp, err := slackClient.PostMessage(req.channelID, fmtChannelAck(opslogEvent))
+		if err != nil {
+			return respond(fmt.Sprintf("Slack error: %s", err.Error()))
+		}
+
+		opslogEvent.AckTimestamp = ackTimestamp
+		opslogEvent.ChannelID = req.channelID
+
 		marshOpslogEvent, err := dynamodbattribute.MarshalMap(opslogEvent)
 		if err != nil {
 			return respond(fmt.Sprintf("Error marshalling new opslog: %s", err.Error()))
@@ -150,11 +163,6 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		_, err = ddbClient.PutItem(input)
 		if err != nil {
 			return respond(fmt.Sprintf("Error putting new opslog in dynamodb: %s", err.Error()))
-		}
-
-		_, _, err = slackClient.PostMessage(req.channelID, fmtChannelAck(opslogEvent))
-		if err != nil {
-			return respond(fmt.Sprintf("Slack error: %s", err.Error()))
 		}
 
 		return ok()

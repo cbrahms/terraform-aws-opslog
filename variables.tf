@@ -1,11 +1,3 @@
-variable "dd_api_key" {
-  description = "Datadog API Key"
-}
-
-variable "dd_app_key" {
-  description = "Datadog APP Key"
-}
-
 variable "aws_account_id" {
   description = "AWS account ID"
 }
@@ -18,10 +10,6 @@ variable "slack_oauth_token" {
   description = "Slack OAuth Access Token"
 }
 
-variable "aws_endpoint_region" {
-  description = "AWS reqion the endpoint will be deployed"
-}
-
-variable "datadog_team" {
-  description = "Datadog team name used to build the dash board URL"
+variable "aws_region" {
+  description = "AWS reqion where opslog will be deployed"
 }

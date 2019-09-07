@@ -1,39 +1,4 @@
 //
-// Datadog
-//
-
-provider "datadog" {
-  api_key = "${var.dd_api_key}"
-  app_key = "${var.dd_app_key}"
-}
-
-resource "datadog_dashboard" "opslog_dashboard" {
-  title        = "Opslog"
-  description  = "Opslog events reported from Slack."
-  layout_type  = "free"
-  is_read_only = false
-
-  widget {
-    event_stream_definition {
-      query       = "tags:app:opslog-test"
-      event_size  = "l"
-      title       = "Opslog events reported from Slack."
-      title_size  = 16
-      title_align = "left"
-      time = {
-        live_span = "1w"
-      }
-    }
-    layout = {
-      height = 700
-      width  = 500
-      x      = 0
-      y      = 0
-    }
-  }
-}
-
-//
 // AWS API Gateway
 //
 
@@ -61,7 +26,7 @@ resource "aws_api_gateway_integration" "opslog_api_gw_integration" {
   http_method             = "${aws_api_gateway_method.opslog_method.http_method}"
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "arn:aws:apigateway:${var.aws_endpoint_region}:lambda:path/2015-03-31/functions/${aws_lambda_function.opslog_lambda.arn}/invocations"
+  uri                     = "arn:aws:apigateway:${var.aws_region}:lambda:path/2015-03-31/functions/${aws_lambda_function.opslog_lambda.arn}/invocations"
 }
 
 //
@@ -79,10 +44,6 @@ resource "aws_lambda_function" "opslog_lambda" {
     variables = {
       SLACK_VERIFICATION_TOKEN = "${var.slack_verification_token}",
       SLACK_OAUTH_TOKEN        = "${var.slack_oauth_token}",
-      DD_API_KEY               = "${var.dd_api_key}",
-      DD_APP_KEY               = "${var.dd_app_key}",
-      DD_TEAM_NAME             = "${var.datadog_team}",
-      DD_DASH_ID               = "${datadog_dashboard.opslog_dashboard.id}"
       DB_TABLE_NAME            = "${aws_dynamodb_table.opslog_table.id}"
     }
   }
@@ -94,7 +55,7 @@ resource "aws_lambda_permission" "api_gw_lambda_perms" {
   function_name = "${aws_lambda_function.opslog_lambda.function_name}"
   principal     = "apigateway.amazonaws.com"
   # More: http://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-control-access-using-iam-policies-to-invoke-api.html
-  source_arn = "arn:aws:execute-api:${var.aws_endpoint_region}:${var.aws_account_id}:${aws_api_gateway_rest_api.opslog_API.id}/*/${aws_api_gateway_method.opslog_method.http_method}${aws_api_gateway_resource.opslog_resource.path}"
+  source_arn = "arn:aws:execute-api:${var.aws_region}:${var.aws_account_id}:${aws_api_gateway_rest_api.opslog_API.id}/*/${aws_api_gateway_method.opslog_method.http_method}${aws_api_gateway_resource.opslog_resource.path}"
 }
 
 resource "aws_iam_role" "oplog_lambda_IAM_role" {
@@ -153,12 +114,11 @@ EOF
 //
 
 resource "aws_dynamodb_table" "opslog_table" {
-  name     = "opslog"
-  hash_key = "Channel"
-  range_key = "MessageIdentifier"
+  name      = "opslog"
+  hash_key  = "Channel"
+  range_key = "DateTime"
 
-  write_capacity = 1
-  read_capacity  = 1
+  billing_mode = "PAY_PER_REQUEST"
 
   attribute {
     name = "Channel"
@@ -166,8 +126,20 @@ resource "aws_dynamodb_table" "opslog_table" {
   }
 
   attribute {
-    name = "MessageIdentifier"
+    name = "User"
     type = "S"
+  }
+
+  attribute {
+    name = "DateTime"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "UserIndex"
+    hash_key        = "User"
+    range_key       = "DateTime"
+    projection_type = "ALL"
   }
 
   tags = {
@@ -191,9 +163,8 @@ resource "aws_iam_role_policy" "opslog_dynamodb_policy" {
         "dynamodb:Query",
         "dynamodb:UpdateItem",
         "dynamodb:BatchGetItem"
-
       ],
-      "Resource": "${aws_dynamodb_table.opslog_table.arn}",
+      "Resource": "arn:aws:dynamodb:*:*:table/${aws_dynamodb_table.opslog_table.name}*",
       "Effect": "Allow"
     }
   ]

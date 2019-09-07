@@ -1,13 +1,11 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/nlopes/slack"
 )
 
 // fmtSendHelp does what it sounds like
-func fmtSendHelp(req slackRequest, dashURL string) slack.MsgOption {
+func fmtSendHelp() slack.MsgOption {
 
 	divSection := slack.NewDividerBlock()
 	headerText := slack.NewTextBlockObject("mrkdwn", "*help*", false, false)
@@ -55,13 +53,6 @@ func fmtSendHelp(req slackRequest, dashURL string) slack.MsgOption {
 		false,
 	)
 	searchAllSection := slack.NewSectionBlock(searchAllText, nil, nil)
-	dashText := slack.NewTextBlockObject(
-		"mrkdwn",
-		fmt.Sprintf("*Datadog dashboard:* %s", dashURL),
-		false,
-		false,
-	)
-	dashSection := slack.NewSectionBlock(dashText, nil, nil)
 
 	msg := slack.MsgOptionBlocks(
 		divSection,
@@ -73,8 +64,6 @@ func fmtSendHelp(req slackRequest, dashURL string) slack.MsgOption {
 		showAllSection,
 		searchSection,
 		searchAllSection,
-		divSection,
-		dashSection,
 	)
 
 	return msg

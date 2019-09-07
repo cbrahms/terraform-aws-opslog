@@ -13,34 +13,22 @@ import (
 
 // opslogEvent is the struct for dynamodb
 type opslogEvent struct {
-	Channel           string
-	MessageIdentifier string
-	Text              string
-	Tags              []string
+	Channel      string
+	User         string
+	DateTime     string
+	Text         string
+	AckTimestamp string
+	ChannelID    string
+	Tags         []string
 }
 
-// getUser gets the user string from MessageIdentifier
-func (o *opslogEvent) getUser() string {
-	re := regexp.MustCompile(`#`)
-	identData := re.Split(o.MessageIdentifier, 2)
-	return identData[0]
-}
-
+// getDateTime converts the unix timestamp to readable
 func (o *opslogEvent) getDateTime() string {
-	re := regexp.MustCompile(`#`)
-	identData := re.Split(o.MessageIdentifier, 2)
-	i, err := strconv.ParseInt(identData[1], 10, 64)
+	i, err := strconv.ParseInt(o.DateTime, 10, 64)
 	if err != nil {
-		log.Printf("Error converting unix time to pretty: %s", err.Error())
+		log.Printf("Error converting unix timestamp: %s", err.Error())
 	}
 	return time.Unix(i, 0).String()
-}
-
-// fmtTag formats it pretty for fmtChannelAck
-func fmtTag(tag string) string {
-	re := regexp.MustCompile(`:`)
-	tags := re.Split(tag, 2)
-	return fmt.Sprintf("*%s:* %s", tags[0], tags[1])
 }
 
 // createOpslogEvent converts the slash request to a struct
@@ -50,10 +38,11 @@ func createOpslogEvent(req slackRequest) opslogEvent {
 	detaggedEvent := detagOrig(req.text, tags)
 
 	return opslogEvent{
-		Channel:           req.channelName,
-		MessageIdentifier: fmt.Sprintf("%s#%d", req.userName, time.Now().Unix()),
-		Text:              detaggedEvent,
-		Tags:              tags,
+		Channel:  req.channelName,
+		User:     req.userName,
+		DateTime: strconv.FormatInt(time.Now().Unix(), 10),
+		Text:     detaggedEvent,
+		Tags:     tags,
 	}
 }
 
@@ -78,11 +67,18 @@ func detagOrig(input string, tags []string) string {
 	return strings.TrimSpace(input)
 }
 
+// fmtTag formats it pretty for fmtChannelAck
+func fmtTag(tag string) string {
+	re := regexp.MustCompile(`:`)
+	tags := re.Split(tag, 2)
+	return fmt.Sprintf("*%s:* %s", tags[0], tags[1])
+}
+
 // fmtChannelAck formats the ack message with new block messaging from slack
 func fmtChannelAck(event opslogEvent) slack.MsgOption {
 
 	var tagBlocks []slack.MixedElement
-	tagBlock := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("*user:* %s", event.getUser()), false, false)
+	tagBlock := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("*user:* %s", event.User), false, false)
 	tagBlocks = append(tagBlocks, tagBlock)
 	for _, tag := range event.Tags {
 		tagBlock := slack.NewTextBlockObject("mrkdwn", fmtTag(tag), false, false)
@@ -103,23 +99,3 @@ func fmtChannelAck(event opslogEvent) slack.MsgOption {
 
 	return msg
 }
-
-// createOpslogEvent converts the raw text to a datadog event and pushes it
-// func createOpslogEvent(req slackRequest) dd.Event {
-
-// 	opslogEvent := dd.Event{}
-// 	opslogEvent.Tags = []string{
-// 		"app:opslog-test",
-// 		fmt.Sprintf("channel:%s", req.channelName),
-// 		fmt.Sprintf("user:%s", req.userName),
-// 	}
-
-// 	tags := harvestTags(req.text)
-
-// 	detaggedEvent := detagOrig(req.text, tags)
-
-// 	opslogEvent.SetTitle(detaggedEvent)
-// 	opslogEvent.Tags = append(opslogEvent.Tags, tags...)
-
-// 	return opslogEvent
-// }
