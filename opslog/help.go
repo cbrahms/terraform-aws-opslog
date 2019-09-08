@@ -13,7 +13,7 @@ func fmtSendHelp() slack.MsgOption {
 	divSection = slack.NewDividerBlock()
 	opslogText := slack.NewTextBlockObject(
 		"mrkdwn",
-		"*/opslog <entry> [#tag:value]*\n\tCreate a new opslog entry, optionally adding tags",
+		"*/opslog <entry> [#<tag>:<value>]...*\n\tCreate a new opslog entry, optionally adding tags",
 		false,
 		false,
 	)

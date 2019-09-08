@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -58,6 +60,21 @@ func ok() (events.APIGatewayProxyResponse, error) {
 	}, nil
 }
 
+// getResultCount pulls the results count number from the command
+func getResultCount(input string) (int, error) {
+
+	splitCmd := strings.Split(input, " ")
+
+	if len(splitCmd) == 2 {
+		r, err := strconv.Atoi(string(splitCmd[1]))
+		if err != nil {
+			return 0, err
+		}
+		return r, nil
+	}
+	return 10, nil
+}
+
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 
 	vals, _ := url.ParseQuery(request.Body)
@@ -82,7 +99,9 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}
 
 	reShow := regexp.MustCompile(`^show \d+$`)
+	reShowDefault := regexp.MustCompile(`^show$`)
 	reShowAll := regexp.MustCompile(`^showall \d+$`)
+	reShowAllDefault := regexp.MustCompile(`^showall$`)
 	reSearch := regexp.MustCompile(`^search .*$`)
 	reSearchAll := regexp.MustCompile(`^searchall .*$`)
 
@@ -113,15 +132,30 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		if err != nil {
 			return respond(fmt.Sprintf("Slack error: %s", err.Error()))
 		}
-		return ok()
+		return respond(fmt.Sprintf("deleted your last opslog entry in <#%s|%s>", lastOpslog.ChannelID, lastOpslog.Channel))
 
 	// show x
-	case reShow.Match([]byte(req.text)):
+	case reShow.Match([]byte(req.text)) || reShowDefault.Match([]byte(req.text)):
 
-		return respond("show last x in current channel")
+		rc, err := getResultCount(req.text)
+		if err != nil {
+			return respond(fmt.Sprintf("Parse string to int error: %s", err.Error()))
+		}
+
+		events, err := getLatestByChannel(req.channelName, rc)
+		if err != nil {
+			return respond(fmt.Sprintf("Get latest error: %s", err.Error()))
+		}
+
+		msg := fmtEvents(events, fmt.Sprintf("*latest %d events in #%s*", len(events), req.channelName))
+		_, err = slackClient.PostEphemeral(req.channelID, req.userID, msg)
+		if err != nil {
+			return respond(fmt.Sprintf("Slack error: %s", err.Error()))
+		}
+		return ok()
 
 	// showall x
-	case reShowAll.Match([]byte(req.text)):
+	case reShowAll.Match([]byte(req.text)) || reShowAllDefault.Match([]byte(req.text)):
 
 		return respond("show last x across all channels")
 

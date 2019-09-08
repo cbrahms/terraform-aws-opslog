@@ -15,6 +15,7 @@ import (
 type opslogEvent struct {
 	Channel      string
 	User         string
+	UserID       string
 	DateTime     string
 	Text         string
 	AckTimestamp string
@@ -40,6 +41,7 @@ func createOpslogEvent(req slackRequest) opslogEvent {
 	return opslogEvent{
 		Channel:  req.channelName,
 		User:     req.userName,
+		UserID:   req.userID,
 		DateTime: strconv.FormatInt(time.Now().Unix(), 10),
 		Text:     detaggedEvent,
 		Tags:     tags,
