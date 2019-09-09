@@ -33,7 +33,6 @@ func getLatestByChannel(channel string, numberResults int) ([]opslogEvent, error
 	}
 
 	results, err := ddbClient.Query(queryInput)
-
 	if err != nil {
 		return []opslogEvent{}, err
 	}
@@ -55,8 +54,35 @@ func getLatestByChannel(channel string, numberResults int) ([]opslogEvent, error
 	return opslogs, nil
 }
 
+// getLatestGLobally
+func getLatestGLobally(numberResults int) ([]opslogEvent, error) {
+	events := []opslogEvent{}
+	var err error
+	recursDelta := 79200 // ~ 1 day
+	for len(events) < numberResults {
+		events, err = getLatestGLoballyInner(numberResults, recursDelta)
+		if err != nil {
+			return []opslogEvent{}, err
+		}
+		if checkDone(recursDelta) {
+			break
+		}
+		recursDelta = recursDelta * 2
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].DateTime > events[j].DateTime
+	})
+
+	if len(events) > numberResults {
+		return events[:numberResults], nil
+	}
+
+	return events, nil
+}
+
 // readableTime
-func readableTime(eventTime string) (string, error) {
+func relatableTime(eventTime string) (string, error) {
 	i, err := strconv.ParseInt(eventTime, 10, 64)
 	if err != nil {
 		return "", err
@@ -65,18 +91,48 @@ func readableTime(eventTime string) (string, error) {
 	return humanize.Time(tm), nil
 }
 
+// evTime
+func evTime(eventTime string) (string, error) {
+	i, err := strconv.ParseInt(eventTime, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	tm := time.Unix(i, 0)
+	return tm.Format("Mon Jan 2 3:04:05pm"), nil
+}
+
+// fmtUser
+func fmtUser(userID string, username string) string {
+	if userID != "" {
+		return fmt.Sprintf("<@%s>", userID)
+	}
+	return fmt.Sprintf("@%s", username)
+}
+
+// fmtChan
+func fmtChan(channelID string, channel string) string {
+	if channelID != "" {
+		return fmt.Sprintf("<#%s|%s>", channelID, channel)
+	}
+	return fmt.Sprintf("#%s", channel)
+}
+
 func fmtEvents(events []opslogEvent, eventsTitle string) slack.MsgOption {
 
 	var bufferedEvents bytes.Buffer
 
-	for _, ev := range events {
-		legibleDateTime, _ := readableTime(ev.DateTime)
+	for evIndex, ev := range events {
+
+		relatableTime, _ := relatableTime(ev.DateTime)
+
+		eventTime, _ := evTime(ev.DateTime)
+
 		if len(ev.Tags) > 0 {
-			fmt.Fprintf(&bufferedEvents, "%s <@%s> in <#%s|%s>: `%s` with tags `%s`\n",
-				legibleDateTime, ev.UserID, ev.ChannelID, ev.Channel, ev.Text, ev.Tags)
+			fmt.Fprintf(&bufferedEvents, "%d) %s @ %s (%s) in %s w/ %s:\n%s\n",
+				evIndex, fmtUser(ev.UserID, ev.User), eventTime, relatableTime, fmtChan(ev.ChannelID, ev.Channel), ev.Tags, ev.Text)
 		} else {
-			fmt.Fprintf(&bufferedEvents, "%s <@%s> in <#%s|%s>: `%s`\n",
-				legibleDateTime, ev.UserID, ev.ChannelID, ev.Channel, ev.Text)
+			fmt.Fprintf(&bufferedEvents, "%d) %s @ %s (%s) in %s:\n%s\n",
+				evIndex, fmtUser(ev.UserID, ev.User), eventTime, relatableTime, fmtChan(ev.ChannelID, ev.Channel), ev.Text)
 		}
 	}
 

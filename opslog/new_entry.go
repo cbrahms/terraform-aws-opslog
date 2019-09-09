@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,15 +20,6 @@ type opslogEvent struct {
 	AckTimestamp string
 	ChannelID    string
 	Tags         []string
-}
-
-// getDateTime converts the unix timestamp to readable
-func (o *opslogEvent) getDateTime() string {
-	i, err := strconv.ParseInt(o.DateTime, 10, 64)
-	if err != nil {
-		log.Printf("Error converting unix timestamp: %s", err.Error())
-	}
-	return time.Unix(i, 0).String()
 }
 
 // createOpslogEvent converts the slash request to a struct

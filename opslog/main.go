@@ -60,7 +60,7 @@ func ok() (events.APIGatewayProxyResponse, error) {
 	}, nil
 }
 
-// getResultCount pulls the results count number from the command
+// getResultCount pulls the results count number from the command, show x & showall x
 func getResultCount(input string) (int, error) {
 
 	splitCmd := strings.Split(input, " ")
@@ -99,11 +99,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}
 
 	reShow := regexp.MustCompile(`^show \d+$`)
-	reShowDefault := regexp.MustCompile(`^show$`)
 	reShowAll := regexp.MustCompile(`^showall \d+$`)
-	reShowAllDefault := regexp.MustCompile(`^showall$`)
-	reSearch := regexp.MustCompile(`^search .*$`)
-	reSearchAll := regexp.MustCompile(`^searchall .*$`)
 
 	switch {
 
@@ -128,14 +124,17 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		if err != nil {
 			return respond(fmt.Sprintf("delete item error: %s", err.Error()))
 		}
-		_, _, err = slackClient.DeleteMessage(lastOpslog.ChannelID, lastOpslog.AckTimestamp)
-		if err != nil {
-			return respond(fmt.Sprintf("Slack error: %s", err.Error()))
+		if lastOpslog.AckTimestamp != "" {
+			_, _, err = slackClient.DeleteMessage(lastOpslog.ChannelID, lastOpslog.AckTimestamp)
+			if err != nil {
+				return respond(fmt.Sprintf("Slack error: %s", err.Error()))
+			}
 		}
-		return respond(fmt.Sprintf("deleted your last opslog entry in <#%s|%s>", lastOpslog.ChannelID, lastOpslog.Channel))
+		return respond(fmt.Sprintf("deleted your last opslog entry in <#%s|%s>",
+			lastOpslog.ChannelID, lastOpslog.Channel))
 
 	// show x
-	case reShow.Match([]byte(req.text)) || reShowDefault.Match([]byte(req.text)):
+	case reShow.Match([]byte(req.text)) || req.text == "show" || req.text == "":
 
 		rc, err := getResultCount(req.text)
 		if err != nil {
@@ -146,6 +145,9 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		if err != nil {
 			return respond(fmt.Sprintf("Get latest error: %s", err.Error()))
 		}
+		if len(events) == 0 {
+			return respond("no events found 😞")
+		}
 
 		msg := fmtEvents(events, fmt.Sprintf("*latest %d events in #%s*", len(events), req.channelName))
 		_, err = slackClient.PostEphemeral(req.channelID, req.userID, msg)
@@ -155,17 +157,35 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		return ok()
 
 	// showall x
-	case reShowAll.Match([]byte(req.text)) || reShowAllDefault.Match([]byte(req.text)):
+	case reShowAll.Match([]byte(req.text)) || req.text == "showall":
 
-		return respond("show last x across all channels")
+		rc, err := getResultCount(req.text)
+		if err != nil {
+			return respond(fmt.Sprintf("Parse string to int error: %s", err.Error()))
+		}
+
+		events, err := getLatestGLobally(rc)
+		if err != nil {
+			return respond(fmt.Sprintf("Get latest error: %s", err.Error()))
+		}
+		if len(events) == 0 {
+			return respond("no events found 😞")
+		}
+
+		msg := fmtEvents(events, fmt.Sprintf("*latest %d events across all channels*", len(events)))
+		_, err = slackClient.PostEphemeral(req.channelID, req.userID, msg)
+		if err != nil {
+			return respond(fmt.Sprintf("Slack error: %s", err.Error()))
+		}
+		return ok()
 
 	// search
-	case reSearch.Match([]byte(req.text)):
+	case strings.HasPrefix(req.text, "search "):
 
 		return respond("search current channel")
 
 	// searchall
-	case reSearchAll.Match([]byte(req.text)):
+	case strings.HasPrefix(req.text, "searchall "):
 
 		return respond("search across all channels")
 

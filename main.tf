@@ -162,7 +162,8 @@ resource "aws_iam_role_policy" "opslog_dynamodb_policy" {
         "dynamodb:PutItem",
         "dynamodb:Query",
         "dynamodb:UpdateItem",
-        "dynamodb:BatchGetItem"
+        "dynamodb:BatchGetItem",
+        "dynamodb:Scan"
       ],
       "Resource": "arn:aws:dynamodb:*:*:table/${aws_dynamodb_table.opslog_table.name}*",
       "Effect": "Allow"

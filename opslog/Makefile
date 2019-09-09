@@ -1,7 +1,7 @@
 SHELL ?= /bin/bash
 
 export BINARY_NAME ?= opslog
-export GOLANG_VERSION ?= 1.12
+export GOLANG_VERSION ?= 1.13
 
 .DEFAULT_GOAL := package
 
